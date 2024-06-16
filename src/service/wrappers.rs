@@ -7,7 +7,7 @@ use bytes::{BufMut, Bytes, BytesMut};
 use rustdds::{
   dds::{ReadError, ReadResult, WriteError, WriteResult},
   rpc::*,
-  serialization::deserialize_from_cdr_with_rep_id,
+  serialization::{deserialize_from_cdr_with_decoder_and_rep_id, deserialize_from_cdr_with_rep_id},
   *,
 };
 
@@ -43,13 +43,31 @@ impl<R> Wrapper for RequestWrapper<R> {
   }
 }
 
-impl<'de, R: Deserialize<'de>> RequestWrapper<R> {
+impl<'de, R> RequestWrapper<R>
+where
+  R: Deserialize<'de>,
+{
   // This will decode the RequestWrapper to Request in Server
   pub(super) fn unwrap(
     &self,
     service_mapping: ServiceMapping,
     message_info: &MessageInfo,
   ) -> ReadResult<(RmwRequestId, R)> {
+    self.unwrap_seed(service_mapping, message_info, PhantomData)
+  }
+}
+
+impl<'de, R> RequestWrapper<R> {
+  // This will decode the RequestWrapper to Request in Server
+  pub(super) fn unwrap_seed<S>(
+    &self,
+    service_mapping: ServiceMapping,
+    message_info: &MessageInfo,
+    seed: S,
+  ) -> ReadResult<(RmwRequestId, R)>
+  where
+    S: serde::de::DeserializeSeed<'de, Value = R>,
+  {
     match service_mapping {
       ServiceMapping::Basic => {
         // 1. decode "RequestHeader" and
@@ -62,19 +80,22 @@ impl<'de, R: Deserialize<'de>> RequestWrapper<R> {
         } else {
           let _header_bytes = bytes.split_off(header_size);
           let (request, _request_bytes) =
-            deserialize_from_cdr_with_rep_id::<R>(&bytes, self.encoding)?;
+            deserialize_from_cdr_with_decoder_and_rep_id(&bytes, self.encoding, seed)?;
           Ok((RmwRequestId::from(header.request_id), request))
         }
       }
       ServiceMapping::Enhanced => {
         // Enhanced mode does not use any header in the DDS payload.
         // Therefore, we use a wrapper that is identical to the payload.
-        let (request, _request_bytes) =
-          deserialize_from_cdr_with_rep_id::<R>(&self.serialized_message, self.encoding)?;
+        let (request, _request_bytes) = deserialize_from_cdr_with_decoder_and_rep_id(
+          &self.serialized_message,
+          self.encoding,
+          seed,
+        )?;
         let mut rmw_req_id = RmwRequestId::from(
           message_info.related_sample_identity()
             .unwrap_or_else(|| {
-              // ServiceMapping::Enhanced is supposed to contain related sample identity as 
+              // ServiceMapping::Enhanced is supposed to contain related sample identity as
               // inline QoS parameter.
               //
               // Use the identity of the incoming request as a default, if there was no
@@ -98,10 +119,11 @@ impl<'de, R: Deserialize<'de>> RequestWrapper<R> {
 
         Ok((rmw_req_id, request))
       }
-      ServiceMapping::Cyclone => cyclone_unwrap::<R>(
+      ServiceMapping::Cyclone => cyclone_unwrap_seed(
         self.serialized_message.clone(),
         message_info.writer_guid(),
         self.encoding,
+        seed,
       ),
     }
   }
@@ -161,15 +183,35 @@ impl<R> Wrapper for ResponseWrapper<R> {
   }
 }
 
-impl<'de, R: Deserialize<'de>> ResponseWrapper<R> {
+impl<'de, R> ResponseWrapper<R>
+where
+  R: Deserialize<'de>,
+{
   // Client decodes ResponseWrapper to Response
   // message_info is from Server's response message
   pub(super) fn unwrap(
     &self,
     service_mapping: ServiceMapping,
-    message_info: MessageInfo,
+    message_info: &MessageInfo,
     client_guid: GUID,
   ) -> ReadResult<(RmwRequestId, R)> {
+    self.unwrap_seed(service_mapping, message_info, client_guid, PhantomData)
+  }
+}
+
+impl<'de, R> ResponseWrapper<R> {
+  // Client decodes ResponseWrapper to Response
+  // message_info is from Server's response message
+  pub(super) fn unwrap_seed<S>(
+    &self,
+    service_mapping: ServiceMapping,
+    message_info: &MessageInfo,
+    client_guid: GUID,
+    seed: S,
+  ) -> ReadResult<(RmwRequestId, R)>
+  where
+    S: serde::de::DeserializeSeed<'de, Value = R>,
+  {
     match service_mapping {
       ServiceMapping::Basic => {
         let mut bytes = self.serialized_message.clone(); // ref copy only
@@ -179,15 +221,19 @@ impl<'de, R: Deserialize<'de>> ResponseWrapper<R> {
           read_error_deserialization!("Service response too short")
         } else {
           let _header_bytes = bytes.split_off(header_size);
-          let (response, _bytes) = deserialize_from_cdr_with_rep_id::<R>(&bytes, self.encoding)?;
+          let (response, _bytes) =
+            deserialize_from_cdr_with_decoder_and_rep_id(&bytes, self.encoding, seed)?;
           Ok((RmwRequestId::from(header.related_request_id), response))
         }
       }
       ServiceMapping::Enhanced => {
         // Enhanced mode does not use any header in the DDS payload.
         // Therefore, we use a wrapper that is identical to the payload.
-        let (response, _response_bytes) =
-          deserialize_from_cdr_with_rep_id::<R>(&self.serialized_message, self.encoding)?;
+        let (response, _response_bytes) = deserialize_from_cdr_with_decoder_and_rep_id(
+          &self.serialized_message,
+          self.encoding,
+          seed,
+        )?;
         let related_sample_identity = match message_info.related_sample_identity() {
           Some(rsi) => rsi,
           None => {
@@ -212,7 +258,12 @@ impl<'de, R: Deserialize<'de>> ResponseWrapper<R> {
         }
         let client_guid = GUID::from_bytes(client_guid_bytes);
 
-        cyclone_unwrap::<R>(self.serialized_message.clone(), client_guid, self.encoding)
+        cyclone_unwrap_seed(
+          self.serialized_message.clone(),
+          client_guid,
+          self.encoding,
+          seed,
+        )
       }
     }
   }
@@ -316,11 +367,15 @@ impl Message for CycloneHeader {}
 
 // helper function, because Cyclone Request and Response unwrapping/decoding are
 // the same.
-fn cyclone_unwrap<'de, R: Deserialize<'de>>(
+fn cyclone_unwrap_seed<'de, R, S>(
   serialized_message: Bytes,
   writer_guid: GUID,
   encoding: RepresentationIdentifier,
-) -> ReadResult<(RmwRequestId, R)> {
+  seed: S,
+) -> ReadResult<(RmwRequestId, R)>
+where
+  S: serde::de::DeserializeSeed<'de, Value = R>,
+{
   // 1. decode "CycloneHeader" and
   // 2. decode Request/response
   let mut bytes = serialized_message; // ref copy only, to make "mutable"
@@ -329,7 +384,8 @@ fn cyclone_unwrap<'de, R: Deserialize<'de>>(
     read_error_deserialization!("Service message too short")
   } else {
     let _header_bytes = bytes.split_off(header_size);
-    let (response, _response_bytes) = deserialize_from_cdr_with_rep_id::<R>(&bytes, encoding)?;
+    let (response, _response_bytes) =
+      deserialize_from_cdr_with_decoder_and_rep_id(&bytes, encoding, seed)?;
     let req_id = RmwRequestId {
       writer_guid, // TODO: This seems to be completely wrong!!!
       // When we are the client, we get half of Client GUID on the CycloneHeader, other half from
