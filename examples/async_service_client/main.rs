@@ -6,8 +6,8 @@ use futures::{FutureExt as StdFutureExt, StreamExt, TryFutureExt};
 use smol::future::FutureExt;
 use serde::{Deserialize, Serialize};
 use ros2_client::{
-  service::CallServiceError, AService, Context, Message, Name, Node, NodeName, NodeOptions,
-  ServiceMapping, ServiceTypeName,
+  service::CallServiceError, AService, Context, Name, Node, NodeName, NodeOptions, ServiceMapping,
+  ServiceTypeName,
 };
 use rustdds::{dds::WriteError, policy, QosPolicies, QosPolicyBuilder};
 
@@ -20,18 +20,16 @@ use rustdds::{dds::WriteError, policy, QosPolicies, QosPolicyBuilder};
 //
 // Then run this example.
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AddTwoIntsRequest {
   pub a: i64,
   pub b: i64,
 }
-impl Message for AddTwoIntsRequest {}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AddTwoIntsResponse {
   pub sum: i64,
 }
-impl Message for AddTwoIntsResponse {}
 
 fn main() {
   pretty_env_logger::init();

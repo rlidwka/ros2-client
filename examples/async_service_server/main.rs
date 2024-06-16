@@ -3,7 +3,7 @@ use log::{debug, error, info, warn};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use ros2_client::{
-  AService, Context, Message, Name, Node, NodeName, NodeOptions, ServiceMapping, ServiceTypeName,
+  AService, Context, Name, Node, NodeName, NodeOptions, ServiceMapping, ServiceTypeName,
 };
 use rustdds::{
   policy::{self, Deadline, Lifespan},
@@ -18,18 +18,16 @@ use rustdds::{
 // or
 // % ros2 run examples_rclcpp_minimal_client client_main
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AddTwoIntsRequest {
   pub a: i64,
   pub b: i64,
 }
-impl Message for AddTwoIntsRequest {}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct AddTwoIntsResponse {
   pub sum: i64,
 }
-impl Message for AddTwoIntsResponse {}
 
 fn main() {
   pretty_env_logger::init();
