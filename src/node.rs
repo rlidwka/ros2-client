@@ -16,7 +16,7 @@ use futures::{
 use async_channel::Receiver;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 use rustdds::{
   dds::{CreateError, CreateResult},
   *,
@@ -1239,7 +1239,7 @@ impl Node {
   /// * `qos` - Quality of Service parameters for the topic (not restricted only
   ///   to ROS2)
   ///
-  ///  
+  ///
   ///   [summary of all rules for topic and service names in ROS 2](https://design.ros2.org/articles/topic_and_service_names.html)
   ///   (as of Dec 2020)
   ///
@@ -1345,7 +1345,8 @@ impl Node {
   ) -> CreateResult<Client<S>>
   where
     S: Service + 'static,
-    S::Request: Clone,
+    S::Request: Serialize + Clone,
+    S::Response: DeserializeOwned,
   {
     // Add rq/ and rr/ prefixes as documented in
     // https://design.ros2.org/articles/topic_and_service_names.html
@@ -1397,7 +1398,8 @@ impl Node {
   ) -> CreateResult<Server<S>>
   where
     S: Service + 'static,
-    S::Request: Clone,
+    S::Request: DeserializeOwned + Clone,
+    S::Response: Serialize,
   {
     // let rq_name = Self::check_name_and_add_prefix("rq/",
     // &(service_name.to_owned() + "Request"))?; let rs_name =

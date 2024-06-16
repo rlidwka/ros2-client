@@ -4,8 +4,6 @@ use std::marker::PhantomData;
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
-use crate::message::Message;
-
 pub mod client;
 pub mod request_id;
 pub mod server;
@@ -23,8 +21,8 @@ pub use client::*;
 /// Additionally, it ensures that Response and Request are Messages
 /// (Serializable), and we have a means to name the types.
 pub trait Service {
-  type Request: Message;
-  type Response: Message;
+  type Request;
+  type Response;
   fn request_type_name(&self) -> &str;
   fn response_type_name(&self) -> &str;
 }
@@ -35,22 +33,14 @@ pub trait Service {
 /// AService is a means of constructing a descriptor for a Service on the fly.
 /// This allows generic code to construct a Service from the types of
 /// request and response.
-pub struct AService<Q, S>
-where
-  Q: Message,
-  S: Message,
-{
+pub struct AService<Q, S> {
   q: PhantomData<Q>,
   s: PhantomData<S>,
   req_type_name: String,
   resp_type_name: String,
 }
 
-impl<Q, S> AService<Q, S>
-where
-  Q: Message,
-  S: Message,
-{
+impl<Q, S> AService<Q, S> {
   pub fn new(req_type_name: String, resp_type_name: String) -> Self {
     Self {
       req_type_name,
@@ -61,11 +51,7 @@ where
   }
 }
 
-impl<Q, S> Service for AService<Q, S>
-where
-  Q: Message,
-  S: Message,
-{
+impl<Q, S> Service for AService<Q, S> {
   type Request = Q;
   type Response = S;
 

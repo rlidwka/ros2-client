@@ -9,6 +9,7 @@ use rustdds::{
   rpc::*,
   *,
 };
+use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{message_info::MessageInfo, node::Node, service::*};
 
@@ -18,8 +19,8 @@ use crate::{message_info::MessageInfo, node::Node, service::*};
 pub struct Server<S>
 where
   S: Service,
-  S::Request: Message,
-  S::Response: Message,
+  S::Request: DeserializeOwned,
+  S::Response: Serialize,
 {
   service_mapping: ServiceMapping,
   request_receiver: SimpleDataReaderR<RequestWrapper<S::Request>>,
@@ -29,6 +30,8 @@ where
 impl<S> Server<S>
 where
   S: 'static + Service,
+  S::Request: DeserializeOwned,
+  S::Response: Serialize,
 {
   pub(crate) fn new(
     service_mapping: ServiceMapping,
@@ -181,6 +184,8 @@ where
 impl<S> Evented for Server<S>
 where
   S: 'static + Service,
+  S::Request: DeserializeOwned,
+  S::Response: Serialize,
 {
   fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
     self.request_receiver.register(poll, token, interest, opts)
