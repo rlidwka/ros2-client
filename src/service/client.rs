@@ -168,7 +168,7 @@ where
       Some(dcc) => {
         let mi = MessageInfo::from(&dcc);
         let res_wrapper = dcc.into_value();
-        let (ri, res) = res_wrapper.unwrap(self.service_mapping, mi, self.client_guid)?;
+        let (ri, res) = res_wrapper.unwrap(self.service_mapping, &mi, self.client_guid)?;
         Ok(Some((ri, res)))
       }
     } // match
@@ -189,7 +189,7 @@ where
           let (req_id, response) =
             dcc
               .into_value()
-              .unwrap(self.service_mapping, mi, self.client_guid)?;
+              .unwrap(self.service_mapping, &mi, self.client_guid)?;
           if req_id == request_id {
             return Ok(response);
           } else {
