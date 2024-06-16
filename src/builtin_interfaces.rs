@@ -1,6 +1,6 @@
 //! Defines message types `Duration` and `Time`. See [builtin_interfaces](https://index.ros.org/p/builtin_interfaces/)
 //!
-//!  
+//!
 //! The name "builtin_interfaces" is not very descriptive, but that is how
 //! it is in ROS.
 //!
@@ -320,6 +320,7 @@ mod test {
   }
 
   #[test]
+  #[allow(clippy::zero_prefixed_literal)]
   fn repr_conversion() {
     repr_conv_test(Time::from_nanos(0_999_999_999));
     repr_conv_test(Time::from_nanos(1_000_000_000));
