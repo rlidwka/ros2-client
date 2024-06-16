@@ -443,6 +443,7 @@ fn test_name() {
 }
 
 #[test]
+#[allow(clippy::bool_assert_comparison)]
 fn test_name_parse() {
   // https://design.ros2.org/articles/topic_and_service_names.html
 
