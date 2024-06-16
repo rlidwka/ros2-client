@@ -30,7 +30,7 @@ pub(crate) struct RequestWrapper<R> {
   phantom: PhantomData<R>,
 }
 
-impl<R: Message> Wrapper for RequestWrapper<R> {
+impl<R> Wrapper for RequestWrapper<R> {
   fn from_bytes_and_ri(input_bytes: &[u8], encoding: RepresentationIdentifier) -> Self {
     RequestWrapper {
       serialized_message: Bytes::copy_from_slice(input_bytes), // cloning here
@@ -43,7 +43,7 @@ impl<R: Message> Wrapper for RequestWrapper<R> {
   }
 }
 
-impl<R: Message> RequestWrapper<R> {
+impl<'de, R: Deserialize<'de>> RequestWrapper<R> {
   // This will decode the RequestWrapper to Request in Server
   pub(super) fn unwrap(
     &self,
@@ -105,7 +105,9 @@ impl<R: Message> RequestWrapper<R> {
       ),
     }
   }
+}
 
+impl<R: Serialize> RequestWrapper<R> {
   // Client creates new RequestWrappers from Requests
   pub(super) fn new(
     service_mapping: ServiceMapping,
@@ -146,7 +148,7 @@ pub(crate) struct ResponseWrapper<R> {
   phantom: PhantomData<R>,
 }
 
-impl<R: Message> Wrapper for ResponseWrapper<R> {
+impl<R> Wrapper for ResponseWrapper<R> {
   fn from_bytes_and_ri(input_bytes: &[u8], encoding: RepresentationIdentifier) -> Self {
     ResponseWrapper {
       serialized_message: Bytes::copy_from_slice(input_bytes), // cloning here
@@ -159,7 +161,7 @@ impl<R: Message> Wrapper for ResponseWrapper<R> {
   }
 }
 
-impl<R: Message> ResponseWrapper<R> {
+impl<'de, R: Deserialize<'de>> ResponseWrapper<R> {
   // Client decodes ResponseWrapper to Response
   // message_info is from Server's response message
   pub(super) fn unwrap(
@@ -214,7 +216,9 @@ impl<R: Message> ResponseWrapper<R> {
       }
     }
   }
+}
 
+impl<R: Serialize> ResponseWrapper<R> {
   // Server creates new ResponseWrapper from Response
   pub(super) fn new(
     service_mapping: ServiceMapping,
@@ -312,7 +316,7 @@ impl Message for CycloneHeader {}
 
 // helper function, because Cyclone Request and Response unwrapping/decoding are
 // the same.
-fn cyclone_unwrap<R: Message>(
+fn cyclone_unwrap<'de, R: Deserialize<'de>>(
   serialized_message: Bytes,
   writer_guid: GUID,
   encoding: RepresentationIdentifier,
