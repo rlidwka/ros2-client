@@ -19,8 +19,6 @@ use crate::{message_info::MessageInfo, node::Node, service::*};
 pub struct Server<S>
 where
   S: Service,
-  S::Request: DeserializeOwned,
-  S::Response: Serialize,
 {
   service_mapping: ServiceMapping,
   request_receiver: SimpleDataReaderR<RequestWrapper<S::Request>>,
@@ -30,8 +28,6 @@ where
 impl<S> Server<S>
 where
   S: 'static + Service,
-  S::Request: DeserializeOwned,
-  S::Response: Serialize,
 {
   pub(crate) fn new(
     service_mapping: ServiceMapping,
@@ -62,7 +58,13 @@ where
       response_sender,
     })
   }
+}
 
+impl<S> Server<S>
+where
+  S: 'static + Service,
+  S::Request: DeserializeOwned,
+{
   /// Receive a request from Client.
   /// Returns `Ok(None)` if no new requests have arrived.
   pub fn receive_request(&self) -> ReadResult<Option<(RmwRequestId, S::Request)>> {
@@ -79,34 +81,6 @@ where
         Ok(Some((ri, req)))
       }
     } // match
-  }
-
-  /// Send response to request by Client.
-  /// rmw_req_id identifies request being responded.
-  pub fn send_response(
-    &self,
-    rmw_req_id: RmwRequestId,
-    response: S::Response,
-  ) -> WriteResult<(), ()> {
-    let resp_wrapper = ResponseWrapper::<S::Response>::new(
-      self.service_mapping,
-      rmw_req_id,
-      RepresentationIdentifier::CDR_LE,
-      response,
-    )?;
-    let write_opts = WriteOptionsBuilder::new()
-      .source_timestamp(Timestamp::now()) // always add source timestamp
-      .related_sample_identity(SampleIdentity::from(rmw_req_id))
-      // TODO: Check if this is right. Cyclone mapping does not send
-      // Related Sample Identity in
-      // WriteOptions (QoS ParameterList), but within data payload.
-      // But maybe it is not harmful to send it in both?
-      .build();
-    self
-      .response_sender
-      .write_with_options(resp_wrapper, write_opts)
-      .map(|_| ())
-      .map_err(|e| e.forget_data()) // lose SampleIdentity result
   }
 
   /// The request_id must be sent back with the response to identify which
@@ -149,6 +123,40 @@ where
       }, // async
     ))
   }
+}
+
+impl<S> Server<S>
+where
+  S: 'static + Service,
+  S::Response: Serialize,
+{
+  /// Send response to request by Client.
+  /// rmw_req_id identifies request being responded.
+  pub fn send_response(
+    &self,
+    rmw_req_id: RmwRequestId,
+    response: S::Response,
+  ) -> WriteResult<(), ()> {
+    let resp_wrapper = ResponseWrapper::<S::Response>::new(
+      self.service_mapping,
+      rmw_req_id,
+      RepresentationIdentifier::CDR_LE,
+      response,
+    )?;
+    let write_opts = WriteOptionsBuilder::new()
+      .source_timestamp(Timestamp::now()) // always add source timestamp
+      .related_sample_identity(SampleIdentity::from(rmw_req_id))
+      // TODO: Check if this is right. Cyclone mapping does not send
+      // Related Sample Identity in
+      // WriteOptions (QoS ParameterList), but within data payload.
+      // But maybe it is not harmful to send it in both?
+      .build();
+    self
+      .response_sender
+      .write_with_options(resp_wrapper, write_opts)
+      .map(|_| ())
+      .map_err(|e| e.forget_data()) // lose SampleIdentity result
+  }
 
   /// Asynchronous response sending
   pub async fn async_send_response(
@@ -184,8 +192,6 @@ where
 impl<S> Evented for Server<S>
 where
   S: 'static + Service,
-  S::Request: DeserializeOwned,
-  S::Response: Serialize,
 {
   fn register(&self, poll: &Poll, token: Token, interest: Ready, opts: PollOpt) -> io::Result<()> {
     self.request_receiver.register(poll, token, interest, opts)
