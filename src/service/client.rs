@@ -17,8 +17,6 @@ use crate::{message_info::MessageInfo, node::Node, service::*};
 pub struct Client<S>
 where
   S: Service,
-  S::Request: Serialize,
-  S::Response: DeserializeOwned,
 {
   service_mapping: ServiceMapping,
   request_sender: DataWriterR<RequestWrapper<S::Request>>,
@@ -30,8 +28,6 @@ where
 impl<S> Client<S>
 where
   S: 'static + Service,
-  S::Request: Serialize,
-  S::Response: DeserializeOwned,
 {
   pub(crate) fn new(
     service_mapping: ServiceMapping,
@@ -64,7 +60,13 @@ where
       client_guid,
     })
   }
+}
 
+impl<S> Client<S>
+where
+  S: 'static + Service,
+  S::Request: Serialize,
+{
   /// Send a request to Service Server.
   /// The returned `RmwRequestId` is a token to identify the correct response.
   pub fn send_request(&self, request: S::Request) -> WriteResult<RmwRequestId, ()> {
@@ -96,28 +98,6 @@ where
       ServiceMapping::Enhanced => Ok(sent_rmw_req_id),
       ServiceMapping::Basic | ServiceMapping::Cyclone => Ok(gen_rmw_req_id),
     }
-  }
-
-  /// Receive a response from Server
-  /// Returns `Ok(None)` if no new responses have arrived.
-  /// Note: The response may to someone else's request. Check received
-  /// `RmWRequestId` against the one you got when sending request to identify
-  /// the correct response. In case you receive someone else's response,
-  /// please do receive again.
-  pub fn receive_response(&self) -> ReadResult<Option<(RmwRequestId, S::Response)>> {
-    self.response_receiver.drain_read_notifications();
-    let dcc_rw: Option<no_key::DeserializedCacheChange<ResponseWrapper<S::Response>>> =
-      self.response_receiver.try_take_one()?;
-
-    match dcc_rw {
-      None => Ok(None),
-      Some(dcc) => {
-        let mi = MessageInfo::from(&dcc);
-        let res_wrapper = dcc.into_value();
-        let (ri, res) = res_wrapper.unwrap(self.service_mapping, mi, self.client_guid)?;
-        Ok(Some((ri, res)))
-      }
-    } // match
   }
 
   /// Send a request to Service Server asynchronously.
@@ -165,6 +145,34 @@ where
     );
     Ok(req_id)
   }
+}
+
+impl<S> Client<S>
+where
+  S: 'static + Service,
+  S::Response: DeserializeOwned,
+{
+  /// Receive a response from Server
+  /// Returns `Ok(None)` if no new responses have arrived.
+  /// Note: The response may to someone else's request. Check received
+  /// `RmWRequestId` against the one you got when sending request to identify
+  /// the correct response. In case you receive someone else's response,
+  /// please do receive again.
+  pub fn receive_response(&self) -> ReadResult<Option<(RmwRequestId, S::Response)>> {
+    self.response_receiver.drain_read_notifications();
+    let dcc_rw: Option<no_key::DeserializedCacheChange<ResponseWrapper<S::Response>>> =
+      self.response_receiver.try_take_one()?;
+
+    match dcc_rw {
+      None => Ok(None),
+      Some(dcc) => {
+        let mi = MessageInfo::from(&dcc);
+        let res_wrapper = dcc.into_value();
+        let (ri, res) = res_wrapper.unwrap(self.service_mapping, mi, self.client_guid)?;
+        Ok(Some((ri, res)))
+      }
+    } // match
+  }
 
   /// Receive a response from Server
   /// The returned Future does not complete until the response has been
@@ -197,7 +205,14 @@ where
       }
     } // loop
   }
+}
 
+impl<S> Client<S>
+where
+  S: 'static + Service,
+  S::Request: Serialize,
+  S::Response: DeserializeOwned,
+{
   pub async fn async_call_service(
     &self,
     request: S::Request,
@@ -208,7 +223,12 @@ where
       .await
       .map_err(CallServiceError::from)
   }
+}
 
+impl<S> Client<S>
+where
+  S: 'static + Service,
+{
   /// Wait for a Server to be connected to the Request and Response topics.
   ///
   /// This does not distinguish between diagnostinc tools and actual servers.
