@@ -159,6 +159,36 @@ where
   /// the correct response. In case you receive someone else's response,
   /// please do receive again.
   pub fn receive_response(&self) -> ReadResult<Option<(RmwRequestId, S::Response)>> {
+    self.receive_response_seed(PhantomData)
+  }
+
+  /// Receive a response from Server
+  /// The returned Future does not complete until the response has been
+  /// received.
+  pub async fn async_receive_response(&self, request_id: RmwRequestId) -> ReadResult<S::Response> {
+    self
+      .async_receive_response_seed(request_id, PhantomData)
+      .await
+  }
+}
+
+impl<'de, S> Client<S>
+where
+  S: 'static + Service,
+{
+  /// Receive a response from Server
+  /// Returns `Ok(None)` if no new responses have arrived.
+  /// Note: The response may to someone else's request. Check received
+  /// `RmWRequestId` against the one you got when sending request to identify
+  /// the correct response. In case you receive someone else's response,
+  /// please do receive again.
+  pub fn receive_response_seed<SE>(
+    &self,
+    seed: SE,
+  ) -> ReadResult<Option<(RmwRequestId, S::Response)>>
+  where
+    SE: serde::de::DeserializeSeed<'de, Value = S::Response>,
+  {
     self.response_receiver.drain_read_notifications();
     let dcc_rw: Option<no_key::DeserializedCacheChange<ResponseWrapper<S::Response>>> =
       self.response_receiver.try_take_one()?;
@@ -168,7 +198,8 @@ where
       Some(dcc) => {
         let mi = MessageInfo::from(&dcc);
         let res_wrapper = dcc.into_value();
-        let (ri, res) = res_wrapper.unwrap(self.service_mapping, &mi, self.client_guid)?;
+        let (ri, res) =
+          res_wrapper.unwrap_seed(self.service_mapping, &mi, self.client_guid, seed)?;
         Ok(Some((ri, res)))
       }
     } // match
@@ -177,7 +208,14 @@ where
   /// Receive a response from Server
   /// The returned Future does not complete until the response has been
   /// received.
-  pub async fn async_receive_response(&self, request_id: RmwRequestId) -> ReadResult<S::Response> {
+  pub async fn async_receive_response_seed<SE>(
+    &self,
+    request_id: RmwRequestId,
+    seed: SE,
+  ) -> ReadResult<S::Response>
+  where
+    SE: serde::de::DeserializeSeed<'de, Value = S::Response> + Clone,
+  {
     let dcc_stream = self.response_receiver.as_async_stream();
     pin_mut!(dcc_stream);
 
@@ -189,7 +227,7 @@ where
           let (req_id, response) =
             dcc
               .into_value()
-              .unwrap(self.service_mapping, &mi, self.client_guid)?;
+              .unwrap_seed(self.service_mapping, &mi, self.client_guid, seed.clone())?;
           if req_id == request_id {
             return Ok(response);
           } else {

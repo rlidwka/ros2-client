@@ -183,21 +183,21 @@ impl<R> Wrapper for ResponseWrapper<R> {
   }
 }
 
-impl<'de, R> ResponseWrapper<R>
-where
-  R: Deserialize<'de>,
-{
-  // Client decodes ResponseWrapper to Response
-  // message_info is from Server's response message
-  pub(super) fn unwrap(
-    &self,
-    service_mapping: ServiceMapping,
-    message_info: &MessageInfo,
-    client_guid: GUID,
-  ) -> ReadResult<(RmwRequestId, R)> {
-    self.unwrap_seed(service_mapping, message_info, client_guid, PhantomData)
-  }
-}
+// impl<'de, R> ResponseWrapper<R>
+// where
+//   R: Deserialize<'de>,
+// {
+//   // Client decodes ResponseWrapper to Response
+//   // message_info is from Server's response message
+//   pub(super) fn unwrap(
+//     &self,
+//     service_mapping: ServiceMapping,
+//     message_info: &MessageInfo,
+//     client_guid: GUID,
+//   ) -> ReadResult<(RmwRequestId, R)> {
+//     self.unwrap_seed(service_mapping, message_info, client_guid, PhantomData)
+//   }
+// }
 
 impl<'de, R> ResponseWrapper<R> {
   // Client decodes ResponseWrapper to Response
