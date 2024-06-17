@@ -1329,7 +1329,6 @@ impl Node {
   ) -> CreateResult<Client<S>>
   where
     S: Service + 'static,
-    S::Request: Clone,
   {
     // Add rq/ and rr/ prefixes as documented in
     // https://design.ros2.org/articles/topic_and_service_names.html
@@ -1381,7 +1380,6 @@ impl Node {
   ) -> CreateResult<Server<S>>
   where
     S: Service + 'static,
-    S::Request: Clone,
   {
     // let rq_name = Self::check_name_and_add_prefix("rq/",
     // &(service_name.to_owned() + "Request"))?; let rs_name =
